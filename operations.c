@@ -2,7 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-
+#include <fcntl.h>
+#include <unistd.h>
 #include "kvs.h"
 #include "constants.h"
 
@@ -94,19 +95,46 @@ int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE]) {
   return 0;
 }
 
-void kvs_show() {
-  for (int i = 0; i < TABLE_SIZE; i++) {
-    KeyNode *keyNode = kvs_table->table[i];
-    while (keyNode != NULL) {
-      printf("(%s, %s)\n", keyNode->key, keyNode->value);
-      keyNode = keyNode->next; // Move to the next node
+void kvs_show(int fd) {
+    if (kvs_table == NULL) {
+        dprintf(fd, "KVS not initialized\n");
+        return;
     }
-  }
+
+    for (int i = 0; i < TABLE_SIZE; i++) {
+        KeyNode *node = kvs_table->table[i];
+        while (node) {
+            dprintf(fd, "(%s, %s)\n", node->key, node->value);
+            node = node->next;
+        }
+    }
 }
 
-int kvs_backup() {
-  return 0;
+
+int kvs_backup(const char *backup_file) {
+    if (kvs_table == NULL) {
+        fprintf(stderr, "KVS state must be initialized\n");
+        return 1;
+    }
+
+    int fd = open(backup_file, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd == -1) {
+        perror("Error opening backup file");
+        return 1;
+    }
+
+    for (int i = 0; i < TABLE_SIZE; i++) {
+        KeyNode *node = kvs_table->table[i];
+        while (node) {
+            dprintf(fd, "%s=%s\n", node->key, node->value);
+            node = node->next;
+        }
+    }
+
+    close(fd);
+    return 0;
 }
+
 
 void kvs_wait(unsigned int delay_ms) {
   struct timespec delay = delay_to_timespec(delay_ms);

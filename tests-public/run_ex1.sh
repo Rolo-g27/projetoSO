@@ -21,7 +21,7 @@ run_test() {
 
     local cmd="$kvs_binary $temp_dir 1 1" #single threaded
 
-    eval "./$cmd" &> /dev/null
+    eval "./$cmd"
 
     local output_file
     output_file="${temp_dir}/${filename}.out"
