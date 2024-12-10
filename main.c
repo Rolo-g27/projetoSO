@@ -70,7 +70,12 @@ void process_file(const char *job_file_path, const char *output_file_path) {
             case CMD_DELETE: {
                 char keys[MAX_WRITE_SIZE][MAX_STRING_SIZE] = {0};
                 size_t num_keys = parse_read_delete(job_fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
-                kvs_delete(num_keys, keys);
+
+                if (num_keys > 0) {
+                    kvs_delete(num_keys, keys, out_fd); // Passa o descritor do ficheiro de saída
+                } else {
+                    dprintf(out_fd, "DELETE: ERROR\n");
+                }
                 break;
             }
             case CMD_BACKUP: {

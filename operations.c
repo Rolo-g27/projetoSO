@@ -72,28 +72,36 @@ int kvs_read(size_t num_pairs, char keys[][MAX_STRING_SIZE]) {
   return 0;
 }
 
-int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE]) {
-  if (kvs_table == NULL) {
-    fprintf(stderr, "KVS state must be initialized\n");
-    return 1;
-  }
-  int aux = 0;
-
-  for (size_t i = 0; i < num_pairs; i++) {
-    if (delete_pair(kvs_table, keys[i]) != 0) {
-      if (!aux) {
-        printf("[");
-        aux = 1;
-      }
-      printf("(%s,KVSMISSING)", keys[i]);
+int kvs_delete(size_t num_pairs, char keys[][MAX_STRING_SIZE], int out_fd) {
+    if (kvs_table == NULL) {
+        fprintf(stderr, "KVS state must be initialized\n");
+        return 1;
     }
-  }
-  if (aux) {
-    printf("]\n");
-  }
 
-  return 0;
+    int has_errors = 0; // Indica se há erros para abrir os parênteses retos
+
+    for (size_t i = 0; i < num_pairs; i++) {
+        if (delete_pair(kvs_table, keys[i]) != 0) {
+            if (!has_errors) {
+                // Abre os parênteses retos na primeira ocorrência de erro
+                dprintf(out_fd, "[");
+                has_errors = 1;
+            }
+            dprintf(out_fd, "(%s,KVSMISSING)", keys[i]);
+            if (i < num_pairs - 1) {
+            }
+        }
+    }
+
+    if (has_errors) {
+        // Fecha os parênteses retos se houve erros
+        dprintf(out_fd, "]\n");
+    }
+
+    return 0;
 }
+
+
 
 void kvs_show(int fd) {
     if (kvs_table == NULL) {
