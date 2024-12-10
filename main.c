@@ -126,6 +126,7 @@ void process_directory(const char *directory_path) {
             continue;
         }
 
+        // Gera o caminho completo para o ficheiro .job
         char job_file_path[PATH_MAX];
         snprintf(job_file_path, sizeof(job_file_path), "%s/%s", directory_path, entry->d_name);
 
@@ -133,17 +134,21 @@ void process_directory(const char *directory_path) {
         char output_file_path[PATH_MAX];
         snprintf(output_file_path, sizeof(output_file_path), "%s/%.*s.out",
                  directory_path,
-                 (int)(ext - entry->d_name), // Copia o nome base (sem extensão)
+                 (int)(ext - entry->d_name), // Copia o nome base (sem extensão .job)
                  entry->d_name);
 
         printf("Processing job file: %s\n", job_file_path);
         printf("Output file will be: %s\n", output_file_path);
+
+        // Remove ficheiros antigos acumulados
+        unlink(output_file_path);
 
         process_file(job_file_path, output_file_path);
     }
 
     closedir(dir);
 }
+
 
 int main(int argc, char *argv[]) {
     if (argc != 4) { // Verifica apenas se o diretório foi passado
@@ -165,3 +170,6 @@ int main(int argc, char *argv[]) {
 
     return EXIT_SUCCESS;
 }
+
+//char output_file_path[PATH_MAX];
+// int len_out = snprintf(output_file_path, sizeof(output_file_path), "%s.out", job_file_path);
