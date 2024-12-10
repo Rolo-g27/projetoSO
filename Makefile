@@ -12,8 +12,9 @@ endif
 
 all: kvs
 
-kvs: main.c job_processor.c operations.o parser.o kvs.o
-	$(CC) $(CFLAGS) -o kvs main.c job_processor.c operations.o parser.o kvs.o
+kvs: main.c constants.h operations.o parser.o kvs.o
+	$(CC) $(CFLAGS) $(SLEEP) -o kvs main.c operations.o parser.o kvs.o
+
 %.o: %.c %.h
 	$(CC) $(CFLAGS) -c ${@:.o=.c}
 

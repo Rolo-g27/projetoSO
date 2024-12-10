@@ -1,2 +1,0 @@
-# projetoSO
-# projetoSO
