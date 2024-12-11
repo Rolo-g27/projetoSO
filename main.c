@@ -66,7 +66,7 @@ void process_file(const char *job_file_path, const char *output_file_path) {
                 size_t num_keys = parse_read_delete(job_fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
                 if (num_keys > 0) {
-                    kvs_read(num_keys, keys, out_fd); // Passa o descritor do ficheiro de saída
+                    kvs_read(num_keys, keys, out_fd);
                 } else {
                     dprintf(out_fd, "READ: ERROR\n");
                 }
@@ -78,7 +78,7 @@ void process_file(const char *job_file_path, const char *output_file_path) {
                 size_t num_keys = parse_read_delete(job_fd, keys, MAX_WRITE_SIZE, MAX_STRING_SIZE);
 
                 if (num_keys > 0) {
-                    kvs_delete(num_keys, keys, out_fd); // Passa o descritor do ficheiro de saída
+                    kvs_delete(num_keys, keys, out_fd);
                 } else {
                     dprintf(out_fd, "DELETE: ERROR\n");
                 }
@@ -88,8 +88,23 @@ void process_file(const char *job_file_path, const char *output_file_path) {
                 sem_wait(&backup_sem);
 
                 backup_count++;
+
+                // Extrair o nome base sem a extensão ".out"
+                char base_name[PATH_MAX];
+                snprintf(base_name, sizeof(base_name), "%.*s",
+                         (int)(strrchr(output_file_path, '.') - output_file_path),
+                         output_file_path);
+
+                // Garantir que o tamanho do backup_file nunca ultrapasse PATH_MAX
                 char backup_file[PATH_MAX];
-                snprintf(backup_file, sizeof(backup_file), "%s-%d.bck", output_file_path, backup_count);
+                int len = snprintf(backup_file, sizeof(backup_file), "%s-%d.bck", base_name, backup_count);
+                if (len < 0 || len >= (int)sizeof(backup_file)) {
+                    fprintf(stderr, "Erro: Nome do arquivo de backup excede o tamanho máximo permitido.\n");
+                    sem_post(&backup_sem);
+                    break;
+                }
+
+                printf("Backup file path: %s\n", backup_file);
 
                 pid_t pid = fork();
                 if (pid == -1) {
@@ -133,8 +148,7 @@ void process_file(const char *job_file_path, const char *output_file_path) {
                 dprintf(out_fd, "INVALID COMMAND\n");
                 break;
             case EOC:
-        // Marca o fim dos comandos. Nenhuma ação necessária.
-            break;
+                break;
             default:
                 break;
         }
@@ -143,6 +157,7 @@ void process_file(const char *job_file_path, const char *output_file_path) {
     close(job_fd);
     close(out_fd);
 }
+
 
 void process_directory(const char *directory_path) {
     DIR *dir = opendir(directory_path);
@@ -159,11 +174,15 @@ void process_directory(const char *directory_path) {
         }
 
         char job_file_path[PATH_MAX];
-        snprintf(job_file_path, sizeof(job_file_path), "%s/%s", directory_path, entry->d_name);
+        snprintf(job_file_path, sizeof(job_file_path), "%s%s%s",
+                 directory_path,
+                 (directory_path[strlen(directory_path) - 1] == '/' ? "" : "/"),
+                 entry->d_name);
 
         char output_file_path[PATH_MAX];
-        snprintf(output_file_path, sizeof(output_file_path), "%s/%.*s.out",
+        snprintf(output_file_path, sizeof(output_file_path), "%s%s%.*s.out",
                  directory_path,
+                 (directory_path[strlen(directory_path) - 1] == '/' ? "" : "/"),
                  (int)(ext - entry->d_name),
                  entry->d_name);
 
@@ -172,6 +191,8 @@ void process_directory(const char *directory_path) {
 
     closedir(dir);
 }
+
+
 
 int main(int argc, char *argv[]) {
     if (argc != 4) {

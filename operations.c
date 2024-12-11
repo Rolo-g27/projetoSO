@@ -161,6 +161,15 @@ int kvs_backup(const char *backup_file) {
     if (fd == -1) {
         perror("Error opening backup file");
         return 1;
+    } else {
+        printf("Backup file opened successfully: %s\n", backup_file);
+    }
+
+    // Verifica se o arquivo foi criado corretamente
+    if (access(backup_file, F_OK) == 0) {
+        printf("Backup file exists: %s\n", backup_file);
+    } else {
+        printf("Backup file does not exist: %s\n", backup_file);
     }
 
     for (int i = 0; i < TABLE_SIZE; i++) {
@@ -172,6 +181,7 @@ int kvs_backup(const char *backup_file) {
     }
 
     close(fd);
+    printf("Backup completed successfully\n");
     return 0;
 }
 
