@@ -15,7 +15,7 @@
 #include "operations.h"
 
 sem_t backup_sem;
-
+    
 void initialize_backup_sem(int max_backups) {
     if (sem_init(&backup_sem, 0, (unsigned int)max_backups) == -1) {
         perror("Erro ao inicializar o semáforo");
@@ -106,14 +106,27 @@ void process_file(const char *job_file_path, const char *output_file_path) {
             case CMD_SHOW:
                 kvs_show(out_fd);
                 break;
+                
             case CMD_WAIT: {
                 unsigned int delay;
                 if (parse_wait(job_fd, &delay, NULL) == 0) {
+                        printf("Waiting...\n");
                     kvs_wait(delay);
                 }
                 break;
             }
             case CMD_HELP:
+                printf( 
+                    "Available commands:\n"
+                    "  WRITE [(key,value)(key2,value2),...]\n"
+                    "  READ [key,key2,...]\n"
+                    "  DELETE [key,key2,...]\n"
+                    "  SHOW\n"
+                    "  WAIT <delay_ms>\n"
+                    "  BACKUP\n" // Not implemented
+                    "  HELP\n"
+                );
+            
             case CMD_EMPTY:
                 break;
             case CMD_INVALID:
