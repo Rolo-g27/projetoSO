@@ -1,5 +1,6 @@
 #include <dirent.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <semaphore.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,13 +10,17 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <limits.h>
-
 #include "constants.h"
 #include "parser.h"
 #include "operations.h"
 
+#define MAX_THREADS 1
 sem_t backup_sem;
-    
+pthread_mutex_t thread_lock = PTHREAD_MUTEX_INITIALIZER;
+
+void process_file(const char *job_file_path, const char *output_file_path);
+
+
 void initialize_backup_sem(int max_backups) {
     if (sem_init(&backup_sem, 0, (unsigned int)max_backups) == -1) {
         perror("Erro ao inicializar o semáforo");
@@ -34,6 +39,21 @@ void perform_backup(const char *backup_file) {
     close(backup_fd);
     exit(EXIT_SUCCESS);
 }
+
+void *thread_process_file(void *arg) {
+    char **paths = (char **)arg;
+    const char *job_file_path = paths[0];
+    const char *output_file_path = paths[1];
+
+    process_file(job_file_path, output_file_path);
+
+    free(paths[0]);
+    free(paths[1]);
+    free(paths);
+
+    return NULL;
+}
+
 
 void process_file(const char *job_file_path, const char *output_file_path) {
     static int backup_count = 0;
@@ -104,8 +124,6 @@ void process_file(const char *job_file_path, const char *output_file_path) {
                     break;
                 }
 
-                printf("Backup file path: %s\n", backup_file);
-
                 pid_t pid = fork();
                 if (pid == -1) {
                     perror("Erro ao criar processo para backup");
@@ -159,12 +177,15 @@ void process_file(const char *job_file_path, const char *output_file_path) {
 }
 
 
-void process_directory(const char *directory_path) {
+void process_directory(const char *directory_path, int max_threads) {
     DIR *dir = opendir(directory_path);
     if (!dir) {
         perror("Erro ao abrir a diretoria");
         return;
     }
+
+    pthread_t threads[MAX_THREADS] = {0};
+    int active_threads = 0;
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
@@ -173,24 +194,87 @@ void process_directory(const char *directory_path) {
             continue;
         }
 
-        char job_file_path[PATH_MAX];
-        snprintf(job_file_path, sizeof(job_file_path), "%s%s%s",
+        char *job_file_path = malloc(PATH_MAX);
+        char *output_file_path = malloc(PATH_MAX);
+
+        if (!job_file_path || !output_file_path) {
+            fprintf(stderr, "Erro de alocação de memória\n");
+            free(job_file_path);
+            free(output_file_path);
+            closedir(dir);
+            return;
+        }
+
+        snprintf(job_file_path, PATH_MAX, "%s%s%s",
                  directory_path,
                  (directory_path[strlen(directory_path) - 1] == '/' ? "" : "/"),
                  entry->d_name);
 
-        char output_file_path[PATH_MAX];
-        snprintf(output_file_path, sizeof(output_file_path), "%s%s%.*s.out",
+        snprintf(output_file_path, PATH_MAX, "%s%s%.*s.out",
                  directory_path,
                  (directory_path[strlen(directory_path) - 1] == '/' ? "" : "/"),
                  (int)(ext - entry->d_name),
                  entry->d_name);
 
-        process_file(job_file_path, output_file_path);
+        pthread_mutex_lock(&thread_lock);
+        while (active_threads >= max_threads) {
+            for (int i = 0; i < MAX_THREADS; i++) {
+                if (threads[i]) {
+                    pthread_join(threads[i], NULL);
+                    threads[i] = 0;
+                    active_threads--;
+                    break;
+                }
+            }
+        }
+        pthread_mutex_unlock(&thread_lock);
+
+        char **paths = malloc(2 * sizeof(char *));
+        if (!paths) {
+            fprintf(stderr, "Erro de alocação de memória\n");
+            free(job_file_path);
+            free(output_file_path);
+            closedir(dir);
+            return;
+        }
+
+        paths[0] = job_file_path;
+        paths[1] = output_file_path;
+
+        int thread_assigned = 0;
+        for (int i = 0; i < MAX_THREADS; i++) {
+            if (!threads[i]) {
+                if (pthread_create(&threads[i], NULL, thread_process_file, paths) != 0) {
+                    perror("Erro ao criar thread");
+                    free(job_file_path);
+                    free(output_file_path);
+                    free(paths);
+                } else {
+                    pthread_mutex_lock(&thread_lock);
+                    active_threads++;
+                    pthread_mutex_unlock(&thread_lock);
+                    thread_assigned = 1;
+                }
+                break;
+            }
+        }
+
+        if (!thread_assigned) {
+            free(job_file_path);
+            free(output_file_path);
+            free(paths);
+        }
     }
 
     closedir(dir);
+
+    for (int i = 0; i < MAX_THREADS; i++) {
+        if (threads[i]) {
+            pthread_join(threads[i], NULL);
+        }
+    }
 }
+
 
 
 
@@ -200,7 +284,14 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    int max_threads = atoi(argv[2]);
     int max_backups = atoi(argv[3]);
+
+    if (max_threads <= 0 || max_threads > MAX_THREADS) {
+        fprintf(stderr, "Erro: O número de threads deve estar entre 1 e %d\n", MAX_THREADS);
+        return EXIT_FAILURE;
+    }
+
     initialize_backup_sem(max_backups);
 
     if (kvs_init() != 0) {
@@ -208,7 +299,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    process_directory(argv[1]);
+    process_directory(argv[1], max_threads);
 
     if (kvs_terminate() != 0) {
         fprintf(stderr, "Falha na terminação do KVS\n");
