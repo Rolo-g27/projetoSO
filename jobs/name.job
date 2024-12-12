@@ -1,0 +1,8 @@
+# Tests buffer overflow for delete, write and read
+WRITE [(key1,value1)(key1,value3)(key3,value3)(key3,value1)(key3,value3)(key1,valueright)(key3,valueright)]
+READ [key1,key3,keyn,key,key3]
+BACKUP
+DELETE [key3,key1,chavequenaoexiste]
+BACKUP
+WRITE [(CHAVEFINAL,C)]
+BACKUP
